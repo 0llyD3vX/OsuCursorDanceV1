@@ -72,7 +72,7 @@ all at the top of the file.
 |---------|---------|-------------|
 | `SYNC_HOTKEY` | `q` | start/sync key |
 | `STOP_HOTKEY` | `w` | stop key |
-| `CLICK_KEYS` | `["z", "x"]` | keys used to hit notes — set to something unused for cursor-only/relax mode |
+| `CLICK_KEYS` | `["z", "x"]` | keys used to hit notes, set to something unused for cursor-only/relax mode |
 | `CURSOR_SENS` | `1.51` | scales movement inward from playfield edges |
 | `SPINNER_RPM` | `390` | spinner speed (~510rpm in-game) |
 | `SPINNER_RADIUS` | `110` | spinner circle radius in pixels |
