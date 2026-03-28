@@ -2,6 +2,9 @@
 
 relax/assist bot for osu!lazer on windows. connects to [tosu](https://github.com/KotRikD/tosu) to read the current map in real time, then handles cursor movement and keypresses using win32 `SendInput` directly.
 
+## Showcase:
+https://www.youtube.com/watch?v=qWbWlwr2LFs
+
 ---
 
 ## what it does
