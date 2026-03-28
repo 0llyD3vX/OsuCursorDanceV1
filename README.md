@@ -102,4 +102,5 @@ tosu streams beatmap state over websocket. when a new map loads, the script pars
 
 - osu!lazer only
 - don't use this on ranked or multiplayer, obviously
+- i'm not responsible for any bans or consequences from using this.
 - leave `EARLY_HIT_MS` at 0, trust me
