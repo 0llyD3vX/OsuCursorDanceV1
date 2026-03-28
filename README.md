@@ -9,7 +9,7 @@ relax/assist bot for osu!lazer on windows. connects to [tosu](https://github.com
 - smooth cursor movement between notes with easing, optional sine-wave arcing between objects
 - follows slider curves properly (bezier, linear, passthrough) including repeats
 - spinners work via parametric circle at a configurable RPM
-- DT/HT detection — picks up speed mods from tosu and adjusts timing automatically
+- DT/HT detection, it picks up speed mods from tosu and adjusts timing automatically
 - precision timing via busy-wait loop (bypasses the ~15ms resolution of `time.sleep`)
 - auto-reloads when you switch maps
 
@@ -32,7 +32,7 @@ websocket-client
 keyboard
 ```
 
-tosu is a separate app, not bundled here — grab it from its own repo and have it running before you start this.
+tosu is a separate app, not bundled here, grab it from its own repo and have it running before you start this.
 
 ---
 
@@ -60,7 +60,7 @@ python relax.py
 | `Q` | sync and start from the first note |
 | `W` | stop |
 
-hit Q whenever — it locks timing from that moment and starts from the top of the map. you can re-sync mid-map if needed.
+hit Q on the first circle, it locks timing from that moment and starts from the top of the map.
 
 ---
 
@@ -88,7 +88,7 @@ all at the top of the file.
 
 ## how it works
 
-tosu streams beatmap state over websocket. when a new map loads, the script parses the `.osu` file directly to get hit objects, slider curves, and timing points. on sync, it builds a full timeline of cursor positions and key events for the whole map, then runs two threads — one for cursor, one for keys — both on the busy-wait timer for accuracy.
+tosu streams beatmap state over websocket. when a new map loads, the script parses the `.osu` file directly to get hit objects, slider curves, and timing points. on sync, it builds a full timeline of cursor positions and key events for the whole map, then runs two threads, one for cursor, one for keys, both on the busy-wait timer for accuracy.
 
 ---
 
