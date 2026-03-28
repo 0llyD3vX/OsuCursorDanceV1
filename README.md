@@ -21,6 +21,9 @@ relax/assist bot for osu!lazer on windows. connects to [tosu](https://github.com
 - python 3.8+
 - [tosu](https://github.com/KotRikD/tosu) running on `localhost:24050`
 
+### Inside your folder should look like this:
+<img width="140" height="196" alt="image" src="https://github.com/user-attachments/assets/b1a54fa7-1f77-401e-9020-6f2482a22cd3" />
+
 ### python deps
 
 ```bash
