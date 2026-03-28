@@ -47,7 +47,7 @@ open the script and set your actual screen resolution at the top:
 SCREEN_W = 2560
 SCREEN_H = 1440
 ```
-
+run tosu.exe and leave it running in the background, you can close the browser tab it opens.
 then just run it:
 
 ```bash
