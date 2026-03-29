@@ -37,7 +37,7 @@ keyboard
 
 tosu is a separate app, not bundled here, grab it from its own repo and have it running before you start this.
 
-### Your folder should contain these 4 files by the end:
+### Your folder should contain these 4 files by the end [its okay if tosu.env is not there, that is automatically created afgter you run it]:
 <img width="616" height="120" alt="image" src="https://github.com/user-attachments/assets/0b4d0bdd-4a2c-4536-aa7e-63d51bcc9964" />
 
 ---
