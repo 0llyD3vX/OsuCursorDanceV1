@@ -316,4 +316,4 @@ Issues and PRs welcome, especially for:
 
 ## License
 
-Do whatever you want with it — just don't use it to cheat on leaderboards. This is for personal education and experimentation only.
+Do whatever you want with it, just don't use it to cheat on leaderboards. This is for personal education and experimentation only.
