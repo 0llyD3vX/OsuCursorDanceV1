@@ -1,4 +1,4 @@
-# osu!relax v0.2.1
+# osu!relax v1.0.0
 
 Advanced relax/assist bot for osu!lazer on Windows. Features predictive movement, stream detection, a dynamic arc system, and configurable click jitter for human-like patterns.
 
@@ -10,7 +10,7 @@ https://www.youtube.com/watch?v=qWbWlwr2LFs
 
 ---
 
-## What's New in v0.2.1
+## What's New in v1.0.0
 
 - **Predictive movement**: anticipates note patterns for smoother cursor flow
 - **Intelligent stream detection**: identifies stream patterns with a fast-path for very rapid streams (<50ms gaps)
@@ -268,7 +268,7 @@ USE_BUSY_WAIT_FOR_FAST = False
 
 ## Version Comparison
 
-| Feature | v0.1.0 | v0.2.0 | v0.2.1 |
+| Feature | v0.1.0 | v0.2.0 | v1.0.0 |
 |---------|--------|--------|--------|
 | Basic movement | ✅ | ✅ | ✅ |
 | Arc mode | ✅ | ✅ improved | ✅ improved |
