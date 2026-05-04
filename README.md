@@ -1,8 +1,6 @@
-# osu!relax v0.2.0
+# osu!relax v0.2.1
 
 Advanced relax/assist bot for osu!lazer on Windows. Features predictive movement, stream detection, a dynamic arc system, and configurable click jitter for human-like patterns.
-
-> **Note:** v0.2.0 has more features but is slightly less reliable on extremely fast jumps compared to v0.1.0. Use this version for QOL improvements if you can accept a small accuracy trade-off. A stability update is coming in v0.2.1. (you can access older versions in the release tab somewhere over to the right ->>)
 
 ---
 
@@ -12,21 +10,21 @@ https://www.youtube.com/watch?v=qWbWlwr2LFs
 
 ---
 
-## What's New in v0.2.0
+## What's New in v0.2.1
 
-- **Predictive movement** - anticipates note patterns for smoother cursor flow
-- **Intelligent stream detection** - identifies and smooths stream patterns automatically
-- **Adaptive arc system** - dynamic arc amplitude based on note distance
-- **Configurable click jitter** - adjustable timing variation (±9ms default) for human-like tapping
-- **Stream smoothing** - configurable passes and alpha for curved stream paths
-- **Relax mode toggle** - press `R` to switch between cursor-only and full auto mid-session
-- **Auto-start** - automatically syncs when the map begins playing
-- **Predictive direction calculation** - looks ahead up to 5 notes for better pathing
-- **Velocity capping** - configurable cursor speed limit to prevent teleporting
-- **Improved slider handling** - better accuracy for complex slider shapes (P and C curves)
-- **osu! pixel coordinate accuracy** - correct conversion between screen and osu! coordinates
-- **Hit bias adjustment** - fine-tune tap timing with a configurable offset
-- **Spinner optimizations** - configurable RPM and radius with smooth circular motion
+- **Predictive movement**: anticipates note patterns for smoother cursor flow
+- **Intelligent stream detection**: identifies stream patterns with a fast-path for very rapid streams (<50ms gaps)
+- **Adaptive arc system**: dynamic arc amplitude based on note distance, with a simplified fallback for large jumps (>250 osu px)
+- **Configurable click jitter**: structured timing variation (±9ms default) reduced automatically for fast notes (<90ms gap)
+- **Stream smoothing**: configurable passes and alpha, with automatic reduction for large average movements
+- **Relax mode toggle**: press `R` to switch between cursor-only and full auto mid-session
+- **Auto-start**: automatically syncs when the map begins playing
+- **Predictive direction calculation**: looks ahead up to 5 notes for better pathing
+- **Fast jump handling**: dedicated busy-wait loop for segments under the fast jump threshold, with optional arc disabling
+- **Improved slider handling**: better accuracy for all curve types (L, P, B, C) with pre-baked arc-length curves
+- **Adaptive sleep**: hybrid smart sleep / busy-wait for sub-millisecond timing precision
+- **Velocity cap disabled by default**: `MAX_CURSOR_DELTA_PX` set to 999999 to prevent missed fast jumps
+- **Hit bias adjustment**: fine-tune tap timing with a configurable offset
 
 ---
 
@@ -71,8 +69,8 @@ SCREEN_H = 1440  # your monitor height
 
 Optional adjustments:
 
-- `PF_Y_OFFSET` - tweak if notes feel too high or too low
-- `CURSOR_SENS` - adjust if cursor position feels off (1.52 is default)
+- `PF_Y_OFFSET`: tweak if notes feel too high or too low
+- `CURSOR_SENS`: adjust if cursor position feels off (1.52 is default)
 
 Run `tosu.exe` and leave it running in the background (you can close the browser tab it opens), then:
 
@@ -87,7 +85,7 @@ python relax.py
 | Key | Action |
 |-----|--------|
 | `Q` | Arm the bot (ready to auto-start) |
-| `W` | Emergency stop. Kills all movement immediately |
+| `W` | Emergency stop, kills all movement immediately |
 | `R` | Toggle RELAX\_MODE (cursor-only vs full auto) |
 
 With `AUTO_START = True` (default), pressing `Q` arms the bot and it starts automatically when the map begins.
@@ -96,14 +94,14 @@ With `AUTO_START = True` (default), pressing `Q` arms the bot and it starts auto
 
 ## Configuration
 
-### Display Settings — Set These First
+### Display Settings - Set These First
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `SCREEN_W` / `SCREEN_H` | `2560` / `1440` | **Must match your actual resolution** |
 | `PF_HEIGHT_PCT` | `0.80` | Playfield height as fraction of screen |
 | `PF_TOP_PCT` | `0.095` | Playfield top position |
-| `PF_Y_OFFSET` | `15` | Fine tune vertical alignment |
+| `PF_Y_OFFSET` | `15` | Fine-tune vertical alignment |
 | `CURSOR_SENS` | `1.52` | Cursor sensitivity scaling |
 
 ### Movement Tuning
@@ -111,13 +109,25 @@ With `AUTO_START = True` (default), pressing `Q` arms the bot and it starts auto
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `MOVEMENT_MODE` | `"predictive"` | `linear` / `arc` / `predictive` |
-| `ARC_MODE` | `True` | Enable sine-wave cursor arcs |
-| `ARC_MAX_AMPLITUDE` | `25` | Maximum arc size in pixels |
-| `ARC_CYCLES` | `0.5` | Sine cycles between notes |
-| `ARC_STREAM_THRESH_PX` | `100` | Distance threshold for arc reduction |
-| `ARC_EXP_BASE` | `0.12` | Arc falloff rate |
-| `SPINNER_RPM` | `350` | Spinner speed (experimental) |
-| `SPINNER_RADIUS` | `90` | Spinner circle radius |
+| `ARC_MODE` | `True` | Enable sine-wave cursor arcs between notes |
+| `ARC_MAX_AMPLITUDE` | `60` | Maximum arc offset in pixels |
+| `ARC_MIN_AMPLITUDE` | `15` | Minimum arc offset in pixels |
+| `ARC_MAX_DISTANCE` | `400` | Distance at which arc reaches max amplitude |
+| `ARC_CYCLES` | `0.5` | Sine cycles per note-to-note movement |
+| `ARC_STREAM_THRESH_PX` | `100` | Distances below this suppress the arc |
+| `ARC_EXP_BASE` | `0.12` | Arc falloff rate (leave as-is) |
+| `SPINNER_RPM` | `350` | Spinner angular speed |
+| `SPINNER_RADIUS` | `90` | Spinner circle radius in pixels |
+
+### Fast Jump Tuning
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `FAST_JUMP_THRESHOLD_MS` | `50` | Segments shorter than this are treated as fast jumps |
+| `DISABLE_ARC_ON_FAST_JUMPS` | `True` | Suppress arc on very high-speed segments |
+| `DISABLE_JITTER_ON_FAST` | `True` | No click jitter on fast jumps |
+| `MAX_JUMP_SPEED_PX_MS` | `15` | Arc disable threshold in pixels/ms |
+| `USE_BUSY_WAIT_FOR_FAST` | `True` | Busy-wait loop for precise timing on fast segments |
 
 ### Features
 
@@ -128,8 +138,8 @@ With `AUTO_START = True` (default), pressing `Q` arms the bot and it starts auto
 | `PREDICT_NOTES` | `5` | Notes ahead to predict (2-5 recommended) |
 | `STREAM_MS_THRESH` | `250` | Timing threshold for stream detection (ms) |
 | `STREAM_SMOOTH` | `True` | Enable stream path smoothing |
-| `STREAM_SMOOTH_PASSES` | `2` | Smoothing iterations (1–3) |
-| `STREAM_SMOOTH_ALPHA` | `0.28` | Smoothing strength (0–1) |
+| `STREAM_SMOOTH_PASSES` | `2` | Smoothing iterations (1-3) |
+| `STREAM_SMOOTH_ALPHA` | `0.28` | Smoothing strength (0-1) |
 | `STREAM_SAMPLES_PER_OSUPX` | `0.4` | Stream sampling density |
 
 ### Timing & Input
@@ -138,16 +148,16 @@ With `AUTO_START = True` (default), pressing `Q` arms the bot and it starts auto
 |---------|---------|-------------|
 | `SYNC_HOTKEY` | `q` | Arm the bot |
 | `STOP_HOTKEY` | `w` | Emergency stop |
-| `CLICK_KEYS` | `["z", "x"]` | Keys used for tapping |
+| `CLICK_KEYS` | `["z", "x"]` | Keys used for alternating taps |
 | `HIT_BIAS_MS` | `-10` | Tap timing offset (negative = earlier) |
-| `CLICK_VARIATION_MS` | `9.0` | Tap timing variation (±ms) |
-| `GAME_OFFSET_MS` | `0` | Universal offset. leave at 0 |
+| `CLICK_VARIATION_MS` | `9.0` | Tap timing variation half-width (ms) |
+| `GAME_OFFSET_MS` | `0` | Universal offset, leave at 0 |
 
 ### Performance Tuning
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `MAX_CURSOR_DELTA_PX` | `110.0` | Max cursor movement per frame. Increase for faster jumps |
+| `MAX_CURSOR_DELTA_PX` | `999999` | Velocity cap per frame, effectively disabled to avoid missed fast jumps |
 | `TIMING_SPIN_WINDOW` | `0.0005` | Final busy-wait window for precision (seconds) |
 | `SEGMENT_MIN_DUR` | `0.005` | Minimum movement segment duration (seconds) |
 
@@ -155,77 +165,81 @@ With `AUTO_START = True` (default), pressing `Q` arms the bot and it starts auto
 
 ## Recommended Presets
 
-**Maximum accuracy. Coming properly in v0.2.1:**
+**Maximum accuracy:**
 ```python
-MAX_CURSOR_DELTA_PX = 999999
-CLICK_VARIATION_MS  = 0
-PREDICT_NOTES       = 3
-STREAM_SMOOTH       = False
-ARC_MODE            = False
+MAX_CURSOR_DELTA_PX    = 999999
+CLICK_VARIATION_MS     = 0
+PREDICT_NOTES          = 3
+STREAM_SMOOTH          = False
+ARC_MODE               = False
+USE_BUSY_WAIT_FOR_FAST = True
 ```
 
 **Human-like / relaxed play:**
 ```python
-ARC_MODE            = True
-ARC_MAX_AMPLITUDE   = 60
-CLICK_VARIATION_MS  = 9.0
-STREAM_SMOOTH       = True
-PREDICT_NOTES       = 5
+ARC_MODE               = True
+ARC_MAX_AMPLITUDE      = 60
+CLICK_VARIATION_MS     = 9.0
+STREAM_SMOOTH          = True
+PREDICT_NOTES          = 5
 ```
 
 **Low-end devices:**
 ```python
-PREDICT_NOTES       = 2
-STREAM_SMOOTH       = False
-ARC_MODE            = False
-MAX_CURSOR_DELTA_PX = 150
+PREDICT_NOTES          = 2
+STREAM_SMOOTH          = False
+ARC_MODE               = False
+USE_BUSY_WAIT_FOR_FAST = False
 ```
 
 ---
 
 ## How It Works
 
-**tosu integration** - connects to the tosu WebSocket at `localhost:24050` for real-time map data.
+**tosu integration**: connects to the tosu WebSocket at `localhost:24050` for real-time map data.
 
-**Beatmap parsing** - reads `.osu` files directly to extract hit objects, slider curves (L/P/B/C), and timing points.
+**Beatmap parsing**: reads `.osu` files directly to extract hit objects, slider curves (L/P/B/C), and timing points.
 
-**Timeline building** - pre computes cursor positions and key events for the entire map before playback begins.
+**Timeline building**: pre-computes cursor positions and key events for the entire map before playback begins. Slider curves are baked into arc-length-parameterised point lists at parse time.
 
-**Stream detection** - analyses note timing and spacing to identify streams and apply smoothing.
+**Stream detection**: analyses note timing and spacing to identify streams. Has a fast-path for very rapid streams (<50ms gap) and rejects streams with large jumps (>150 osu px) between notes.
 
-**Predictive movement** - looks ahead `PREDICT_NOTES` notes to anticipate direction changes before they happen.
+**Predictive movement**: looks ahead `PREDICT_NOTES` notes to anticipate direction changes. For very fast next notes (<50ms) the immediate direction is used instead.
 
-**Dual-thread execution** - cursor movement and key presses run on separate threads to avoid blocking each other.
+**Fast jump handling**: segments shorter than `FAST_JUMP_THRESHOLD_MS` use a dedicated busy-wait loop for precise timing, with arc optionally disabled based on pixels-per-ms speed.
 
-**Precision timing** - hybrid sleep/busy-wait loop for sub-millisecond accuracy on note hits.
+**Dual-thread execution**: cursor movement and key presses run on separate threads to avoid blocking each other.
 
-**Direct input** - uses `SendInput` for the lowest latency mouse and keyboard events possible.
+**Precision timing**: hybrid `smart_sleep_until` / busy-wait for sub-millisecond accuracy. The final 2ms of every segment always busy-waits.
+
+**Direct input**: uses `SendInput` for the lowest-latency mouse and keyboard events possible.
 
 ### Movement Types
 
 | Mode | Behaviour |
 |------|-----------|
-| `linear` | Straight line with smooth easing |
+| `linear` | Straight line with smooth cubic easing |
 | `arc` | Sine-wave perpendicular oscillation |
-| `predictive` | Arc with look-ahead direction prediction |
+| `predictive` | Arc with look-ahead direction prediction, falls back to simple arc for jumps >250 osu px |
 
 ### Supported Curve Types
 
 | Type | Description |
 |------|-------------|
-| `L` | Linear - straight line segments |
-| `P` | Perfect - circular arc through 3 points |
-| `B` | Bézier - single or compound curves |
-| `C` | Catmull Rom splines |
+| `L` | Linear, straight line segments |
+| `P` | Perfect circle, circular arc through 3 points |
+| `B` | Bezier, single or compound curves with repeat-point splitting |
+| `C` | Catmull-Rom splines |
 
 ---
 
 ## Troubleshooting
 
 **Cursor feels laggy or slow on fast jumps**
-- Increase `MAX_CURSOR_DELTA_PX` (try 300–500)
+- Ensure `MAX_CURSOR_DELTA_PX` is `999999` (default)
+- Enable `USE_BUSY_WAIT_FOR_FAST`
 - Disable `ARC_MODE` for direct movement
-- Reduce `PREDICT_NOTES` to 2–3
+- Reduce `PREDICT_NOTES` to 2-3
 
 **Tapping feels early or late**
 - Adjust `HIT_BIAS_MS` (more negative = earlier taps)
@@ -242,60 +256,40 @@ MAX_CURSOR_DELTA_PX = 150
 
 **Streams feel choppy**
 - Enable `STREAM_SMOOTH`
-- Increase `STREAM_SMOOTH_PASSES` to 2–3
-- Lower `STREAM_SMOOTH_ALPHA` to 0.2–0.3
+- Increase `STREAM_SMOOTH_PASSES` to 2-3
+- Lower `STREAM_SMOOTH_ALPHA` to 0.2-0.3
 
 **High CPU usage**
 - Reduce `PREDICT_NOTES` to 2
 - Disable `STREAM_SMOOTH`
-- Lower `MAX_CURSOR_DELTA_PX`
+- Set `USE_BUSY_WAIT_FOR_FAST = False`
 
 ---
 
 ## Version Comparison
 
-| Feature | v0.1.0 | v0.2.0 |
-|---------|--------|--------|
-| Basic movement | ✅ | ✅ |
-| Arc mode | ✅ | ✅ improved |
-| Slider support (L/B) | ✅ | ✅ |
-| Slider support (P/C) | ❌ | ✅ |
-| Stream detection | ❌ | ✅ |
-| Stream smoothing | ❌ | ✅ |
-| Click jitter | ❌ | ✅ |
-| Predictive movement | ❌ | ✅ |
-| Auto-start | ❌ | ✅ |
-| Relax mode toggle | ❌ | ✅ |
-| Velocity capping | ❌ | ✅ |
-| Fast jump accuracy | Excellent | Good (fix in v0.2.1) |
-| Stability | Rock solid | Slightly less reliable |
-
-**Recommendation:** Use v0.1.0 for maximum accuracy on extremely hard maps. Use v0.2.0 for everyday play and the expanded feature set.
-
----
-
-## Known Issues in v0.2.0
-
-- **Fast jump accuracy** - may occasionally miss notes on extremely fast sections (16★) due to velocity capping and arc prediction overhead
-- **Stream detection** - some complex or irregular stream patterns may be misidentified
-- **Memory usage** - the pre-baked curve system uses more RAM than v0.1.0
-
----
-
-## Roadmap (v0.2.1)
-
-- Fix fast jump velocity capping
-- Smart arc disabling for high speed sections
-- Improved stream detection consistency
-- Performance profiling
-- Optimised memory usage
-- Jump pre-computation
+| Feature | v0.1.0 | v0.2.0 | v0.2.1 |
+|---------|--------|--------|--------|
+| Basic movement | ✅ | ✅ | ✅ |
+| Arc mode | ✅ | ✅ improved | ✅ improved |
+| Slider support (L/B) | ✅ | ✅ | ✅ |
+| Slider support (P/C) | ❌ | ✅ | ✅ |
+| Stream detection | ❌ | ✅ | ✅ fast-path |
+| Stream smoothing | ❌ | ✅ | ✅ adaptive |
+| Click jitter | ❌ | ✅ | ✅ adaptive |
+| Predictive movement | ❌ | ✅ | ✅ |
+| Auto-start | ❌ | ✅ | ✅ |
+| Relax mode toggle | ❌ | ✅ | ✅ |
+| Fast jump busy-wait | ❌ | ❌ | ✅ |
+| Velocity cap | capped | capped | disabled (999999) |
+| Fast jump accuracy | Excellent | Good | Excellent |
+| Stability | Rock solid | Slightly less reliable | Solid |
 
 ---
 
 ## Notes
 
-- **osu!lazer only** - does not work with osu!stable
+- **osu!lazer only**, does not work with osu!stable
 - Don't use this on ranked or multiplayer
 - I'm not responsible for any bans or consequences
 - Leave `GAME_OFFSET_MS` at 0 unless you know what you're doing
@@ -310,7 +304,7 @@ Issues and PRs welcome, especially for:
 - Performance optimisations
 - Additional curve types
 - Improved prediction algorithms
-- Fast jump accuracy fixes
+- Better stream pattern recognition
 
 ---
 
