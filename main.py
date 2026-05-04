@@ -22,44 +22,53 @@ STOP_HOTKEY    = "w"    # press this to stop
 CLICK_KEYS     = ["z", "x"]
 GAME_OFFSET_MS = 0    # dont touch this (it doesnt do much)
 HIT_BIAS_MS    = -10   # reverse sign (positive ingame offset = negative one here)
-CURSOR_SENS    = 1.52    # sensitivity 
+CURSOR_SENS    = 1.52    # sensitivity
 
 # Movement Tuning
 MOVEMENT_MODE  = "predictive"   # linear / arc / predictive
 ARC_MODE          = True      # for arcs in between notes
-ARC_MAX_AMPLITUDE  = 25    # arc size
+ARC_MAX_AMPLITUDE  = 60    # arc size
+ARC_MIN_AMPLITUDE  = 15
+ARC_MAX_DISTANCE   = 400
 ARC_CYCLES        = 0.5        # keep this the same for a single arc
 ARC_STREAM_THRESH_PX = 100       # any distance closer than this will not have an arc
 ARC_EXP_BASE       = 0.12      # diminishing arc (best to leave this)
-SPINNER_RPM    = 350         #spinner speed (does not correlate to ingame so play with it)
-SPINNER_RADIUS = 90        
+SPINNER_RPM    = 350         # spinner speed (does not correlate to ingame so play with it)
+SPINNER_RADIUS = 90
 
 # Features
 RELAX_MODE        = False      # only tapping (this is fun)
-AUTO_START        = True       # keep this on, auto start = false does not work right now, if your auto start timing is off, change offset per map up there ^
-PREDICT_NOTES     = 5         # best to keep this at 5 unless you have a low end device, incase lower to 2/3
+AUTO_START        = True       # keep this on
+PREDICT_NOTES     = 5         # best to keep this at 5 unless you have a low end device
 STREAM_MS_THRESH  = 250        # smallest time between notes to detect a stream
 DEBUG_MOVEMENT    = False     # didnt work :(
-STREAM_SMOOTH     = True       #smooth streams
-STREAM_SMOOTH_PASSES = 2             # best to leave these 3 alone
+STREAM_SMOOTH     = True       # smooth streams
+STREAM_SMOOTH_PASSES = 2
 STREAM_SMOOTH_ALPHA  = 0.28
 STREAM_SAMPLES_PER_OSUPX = 0.4
 
+# Fast jump tuning (new)
+FAST_JUMP_THRESHOLD_MS   = 50      # notes faster than this are "fast jumps"
+DISABLE_ARC_ON_FAST_JUMPS = True   # disable arc for very fast jumps
+DISABLE_JITTER_ON_FAST = True      # no jitter on fast jumps
+MAX_JUMP_SPEED_PX_MS     = 15      # arc disable threshold (pixels per ms)
+USE_BUSY_WAIT_FOR_FAST   = True    # busy-wait for precise timing on fast segments
+
 # Display Setup
-SCREEN_W = 2560         #do this to your display
+SCREEN_W = 2560
 SCREEN_H = 1440
-PF_HEIGHT_PCT = 0.80       # dont worry about this
+PF_HEIGHT_PCT = 0.80
 PF_TOP_PCT    = 0.095
-PF_Y_OFFSET   = 15        # if notes are hit too hgh / low change this
+PF_Y_OFFSET   = 15        # if notes are hit too high/low change this
 OSU_W, OSU_H  = 512, 384
-USE_VIRTUAL_DESK = False        # dont.
+USE_VIRTUAL_DESK = False
 
 # Tosu
 TOSU_WS_URL = "ws://localhost:24050/websocket/v2"
 
 ################# END OF CONFIG ##############################################
 
-# Numeric thresholds (dont touch anything here this is not part of the config)
+# Numeric thresholds
 FLOAT_EPSILON = 1e-3
 DOUBLE_EPSILON = 1e-7
 OSU_OOB_MARGIN         = 96.0
@@ -68,12 +77,12 @@ SLIDER_BASE_STEP_ADD   = 80
 SLIDER_MIN_STEPS       = 120
 SLIDER_MAX_STEPS       = 6000
 SEGMENT_MIN_DUR        = 0.005
-ARCLENGTH_EPSILON      = FLOAT_EPSILON   # treat as zero-length if total arc < this
-TIMING_SPIN_WINDOW     = 0.0005 # Spin only final 0.5ms for precise timing
-CIRCLE_DET_THRESHOLD   = FLOAT_EPSILON   # Minimum determinant for valid circles
-TINY_ARC_THRESHOLD     = FLOAT_EPSILON * 10   # rad; collapse P-arcs smaller than this
-MAX_CURSOR_DELTA_PX    = 110.0   # per-frame velocity cap in screen pixels
-CLICK_VARIATION_MS     = 9.0    # half-width of click timing window
+ARCLENGTH_EPSILON      = FLOAT_EPSILON
+TIMING_SPIN_WINDOW     = 0.0005
+CIRCLE_DET_THRESHOLD   = FLOAT_EPSILON
+TINY_ARC_THRESHOLD     = FLOAT_EPSILON * 10
+MAX_CURSOR_DELTA_PX    = 999999.0   # effectively disabled - was causing missed fast jumps
+CLICK_VARIATION_MS     = 9.0        # half-width of click timing window
 
 # Playfield
 
@@ -91,7 +100,6 @@ def now():
     return time.perf_counter()
 
 
-# Centralized coordinate transforms with screen-to-osu support
 def osu_to_screen(ox, oy):
     ox = float(ox)
     oy = float(oy)
@@ -107,7 +115,6 @@ def osu_to_screen(ox, oy):
     return tx, ty
 
 def screen_to_osu(sx, sy):
-    """Inverse of osu_to_screen"""
     if CURSOR_SENS and CURSOR_SENS != 1.0:
         cx = PF_LEFT + PF_W * 0.5
         cy = PF_TOP  + PF_H * 0.5
@@ -118,40 +125,30 @@ def screen_to_osu(sx, sy):
     return ox, oy
 
 def lerp(start, end, amount):
-    """osu!'s exact Lerp implementation"""
     return start + (end - start) * amount
 
 def ease(t):
     t = max(0.0, min(1.0, t))
     return 3 * t * t - 2 * t * t * t
 
-smooth_easing = ease   # alias so the rest of the file uses the same name
+smooth_easing = ease
+
 
 # Circle / Arc helpers
 
 def circle_from_3pts(p0, p1, p2):
-    """
-    Perpendicular-bisector circle through three points.
-    Returns (cx, cy, r, start_angle) or None if degenerate.
-    """
     x0, y0 = p0
     x1, y1 = p1
     x2, y2 = p2
-
     mx01, my01 = (x0 + x1) / 2, (y0 + y1) / 2
     dx01, dy01 = y1 - y0, x0 - x1
-
     mx12, my12 = (x1 + x2) / 2, (y1 + y2) / 2
     dx12, dy12 = y2 - y1, x1 - x2
-
     a1, b1, c1 = dy01, -dx01, dx01 * mx01 + dy01 * my01
     a2, b2, c2 = dy12, -dx12, dx12 * mx12 + dy12 * my12
-
     det = a1 * b2 - a2 * b1
-    
     if abs(det) < CIRCLE_DET_THRESHOLD:
         return None
-
     cx = (b2 * c1 - b1 * c2) / det
     cy = (a1 * c2 - a2 * c1) / det
     r  = math.hypot(cx - x0, cy - y0)
@@ -160,8 +157,8 @@ def circle_from_3pts(p0, p1, p2):
 
 
 def _cross2d(o, a, b):
-    """2-D cross product of vectors OA and OB."""
     return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
 
 # Arc movement
 
@@ -169,6 +166,44 @@ def apply_predictive_arc(elapsed, dt, x1, y1, x2, y2, dist_osu_px,
                           pred_dir_x=None, pred_dir_y=None):
     if dt <= 0:
         return x1, y1
+    
+    # SIMPLE FALLBACK: For very large jumps, use the first script's method
+    # This ensures reliability on big jumps
+    if dist_osu_px > 250:  # Very large jumps
+        # Use the first script's simpler arc method
+        phase = max(0.0, min(1.0, elapsed / dt))
+        dx = x2 - x1
+        dy = y2 - y1
+        dist = math.sqrt(dx*dx + dy*dy)
+        
+        eased_phase = smooth_easing(phase)
+        x = x1 + dx * eased_phase
+        y = y1 + dy * eased_phase
+        
+        if dist > 0:
+            perp_x = -dy / dist
+            perp_y = dx / dist
+            # Use consistent 60px arc like first script
+            wave = math.sin(phase * 2 * math.pi * ARC_CYCLES)
+            offset = wave * 60  # Fixed amplitude like first script
+            x += perp_x * offset
+            y += perp_y * offset
+        
+        return int(x), int(y)
+
+    dist_factor = min(dist_osu_px / ARC_MAX_DISTANCE, 1.0)
+    amplitude = ARC_MIN_AMPLITUDE + (ARC_MAX_AMPLITUDE - ARC_MIN_AMPLITUDE) * dist_factor
+
+    # Fast jump detection: skip arc and use strong easing instead
+    osu_dist = dist_osu_px  # Already calculated above
+    jump_speed_osu_px_ms = osu_dist / (dt * 1000.0) if dt > 0 else 0
+    # Don't disable arc for fast jumps, just reduce amplitude slightly
+    if DISABLE_ARC_ON_FAST_JUMPS and jump_speed_osu_px_ms > 5.0:  # 5 osu pixels/ms is very fast
+        # Still use arc but with reduced amplitude for very fast jumps
+        amplitude *= 0.6
+        phase = max(0.0, min(1.0, elapsed / dt))
+        eased_phase = smooth_easing(phase)
+        return x1 + (x2 - x1) * eased_phase, y1 + (y2 - y1) * eased_phase
 
     phase = max(0.0, min(1.0, elapsed / dt))
     dx, dy = x2 - x1, y2 - y1
@@ -200,6 +235,7 @@ def apply_arc(elapsed, dt, x1, y1, x2, y2):
     dx_osu = math.hypot(x2 - x1, y2 - y1)
     return apply_predictive_arc(elapsed, dt, x1, y1, x2, y2, dx_osu)
 
+
 # Curve sampling
 
 def evaluate_bezier(points, t):
@@ -219,13 +255,6 @@ def _clamp_osu(pt):
 
 
 def sample_curve(curve_type, points, steps=40, pixel_length=None):
-    """
-    Sample a slider curve. Supports L/P/B/C.
-    P uses cross-product for CW/CCW direction.
-    tiny arcs treated as linear.
-    P->B fallback is explicit and logged.
-    steps scaled by abs(total_angle) for curved arcs.
-    """
     if not points or len(points) < 2:
         return [_clamp_osu(p) for p in points[:1]]
     if steps < 2:
@@ -246,92 +275,58 @@ def sample_curve(curve_type, points, steps=40, pixel_length=None):
             out.append((lerp(x1, x2, local_t), lerp(y1, y2, local_t)))
         return out
 
-
     elif curve_type == "P" and len(points) == 3:
         p0 = _clamp_osu(points[0])
         p1 = _clamp_osu(points[1])
         p2 = _clamp_osu(points[2])
-        
-        # Vector operations
         a_x, a_y = p0
         b_x, b_y = p1
         c_x, c_y = p2
-        
-        # Check for degenerate triangle (collinear points)
         det = (b_y - a_y) * (c_x - a_x) - (b_x - a_x) * (c_y - a_y)
         if abs(det) < 1e-6:
             return sample_curve("L", [p0, p2], steps)
-        
-        # Calculate circle center and radius (exactly as osu! does)
         d = 2.0 * (a_x * (b_y - c_y) + b_x * (c_y - a_y) + c_x * (a_y - b_y))
         a_sq = a_x * a_x + a_y * a_y
         b_sq = b_x * b_x + b_y * b_y
         c_sq = c_x * c_x + c_y * c_y
-        
         cx = (a_sq * (b_y - c_y) + b_sq * (c_y - a_y) + c_sq * (a_y - b_y)) / d
         cy = (a_sq * (c_x - b_x) + b_sq * (a_x - c_x) + c_sq * (b_x - a_x)) / d
-        
         dA_x = a_x - cx
         dA_y = a_y - cy
         dC_x = c_x - cx
         dC_y = c_y - cy
-        
         r = math.hypot(dA_x, dA_y)
-        
         if r <= 1e-6:
             return sample_curve("L", [p0, p2], steps)
-        
-        # Calculate angles (exactly as osu! does)
         theta_start = math.atan2(dA_y, dA_x)
         theta_end = math.atan2(dC_y, dC_x)
-        
-        # Ensure theta_end >= theta_start for initial calculation
         while theta_end < theta_start:
             theta_end += 2.0 * math.pi
-        
-        # Initial values (assume CCW)
         direction = 1.0
         theta_range = theta_end - theta_start
-        
-        # Decide direction based on which side of AC point B lies
-        ortho_AC_x = c_y - a_y  # Note: osu! does (c - a) then swaps with negation
-        ortho_AC_y = -(c_x - a_x)  # This is equivalent to (y, -x) of (c - a)
-        
-        # Dot product: ortho_AC · (b - a)
+        ortho_AC_x = c_y - a_y
+        ortho_AC_y = -(c_x - a_x)
         dot = ortho_AC_x * (b_x - a_x) + ortho_AC_y * (b_y - a_y)
-        
         if dot < 0:
             direction = -1.0
             theta_range = 2.0 * math.pi - theta_range
-        
         total_angle = direction * theta_range
-        
-        # Clamp extreme arcs (safety)
         max_angle = 2.5 * math.pi
         if abs(total_angle) > max_angle:
             total_angle = math.copysign(max_angle, total_angle)
-        
-        # Sampling
         curved_steps = min(
             max(steps, int(abs(total_angle) * r * 0.6)),
             SLIDER_MAX_STEPS
         )
-        
         out = []
         for i in range(curved_steps):
             t = i / (curved_steps - 1)
             a = theta_start + t * total_angle
-            out.append(_clamp_osu((
-                cx + r * math.cos(a),
-                cy + r * math.sin(a)
-            )))
-        
+            out.append(_clamp_osu((cx + r * math.cos(a), cy + r * math.sin(a))))
         if curved_steps != steps:
             out = sample_polyline_linear(out, steps)
-        
         return out
 
- 
     elif curve_type == "C":
         pts = [(float(x), float(y)) for x, y in points]
         if len(pts) < 2:
@@ -359,7 +354,6 @@ def sample_curve(curve_type, points, steps=40, pixel_length=None):
             out.append(_clamp_osu((x, y)))
         return out
 
- 
     elif curve_type == "B":
         segments = []
         seg_start = 0
@@ -419,7 +413,6 @@ def sample_curve(curve_type, points, steps=40, pixel_length=None):
             out = sample_polyline_linear(out, steps)
         return out
 
-    # Default single bezier
     out = []
     for i in range(steps):
         t = i / (steps - 1)
@@ -506,7 +499,7 @@ def sample_polyline_linear(points, steps):
 
 
 # Timing helpers
-# Hybrid sleep: coarse sleep then precise spin for timing
+
 def sleep_until(wall):
     while True:
         remaining = wall - now()
@@ -515,6 +508,20 @@ def sleep_until(wall):
         if remaining > TIMING_SPIN_WINDOW:
             time.sleep(remaining - TIMING_SPIN_WINDOW)
         # spin final window
+
+
+def smart_sleep_until(wall):
+    while True:
+        remaining = wall - now()
+        if remaining <= 0:
+            break
+        if remaining > 0.002:  # Changed from 0.005
+            time.sleep(max(0.0001, remaining - 0.001))
+        else:
+            # Busy wait for final 2ms
+            while now() < wall:
+                pass
+            break
 
 # .osu parsing
 
@@ -564,9 +571,9 @@ def get_timing_at(pts, t):
             break
         if not p["inherited"]:
             mpb = p["ms_per_beat"]
-            sv  = 1.0          # reset SV on uninherited point
+            sv  = 1.0
         else:
-            sv  = p["sv_mult"] # step-latch SV (no blend)
+            sv  = p["sv_mult"]
     return mpb, sv
 
 
@@ -605,7 +612,6 @@ def parse_hit_objects(lines, smult, pts):
             slider_repeats      = 1
             slider_length       = None
 
-            # Precompute curve and arc table at parse time
             cached_curve    = None
             cached_arc_cum  = None
             cached_arc_total= 0.0
@@ -636,19 +642,15 @@ def parse_hit_objects(lines, smult, pts):
                         if len(pts_list) > 1:
                             slider_curve_points = pts_list
 
-                # Bake the curve once here and store it
                 if slider_curve_points and slen > 0:
                     target_len = float(slen)
                     steps = max(SLIDER_MIN_STEPS,
                                 min(SLIDER_MAX_STEPS,
                                     int(target_len * SLIDER_STEP_FACTOR) + SLIDER_BASE_STEP_ADD))
-                    
-                    # For P curves, DON'T pass pixel_length - let it use the geometric arc
                     if slider_curve_type == "P":
                         sampled = sample_curve(slider_curve_type, slider_curve_points, steps)
                     else:
                         sampled = sample_curve(slider_curve_type, slider_curve_points, steps, pixel_length=target_len)
-                    
                     trimmed, arc_cum, arc_total = truncate_curve_to_length(sampled, slen)
                     cached_curve     = trimmed
                     cached_arc_cum   = arc_cum
@@ -671,7 +673,6 @@ def parse_hit_objects(lines, smult, pts):
                 "slider_curve_points": slider_curve_points,
                 "slider_repeats":      slider_repeats,
                 "slider_length":       slider_length,
-                # Pre-baked curve data
                 "cached_curve":     cached_curve,
                 "cached_arc_cum":   cached_arc_cum,
                 "cached_arc_total": cached_arc_total,
@@ -701,48 +702,70 @@ def resolve_path(data):
 
 # Stream detection & path helpers
 
-def detect_streams(objects, start_idx, thresh_ms=STREAM_MS_THRESH, 
-                          min_notes=4, look_ahead=50):
-    """
-    Simple stream detection.
-    Stream = consecutive circles with:
-    1. Consistent timing (all gaps < threshold)
-    2. No sliders/spinners
-    3. Minimum 4 notes
-    """
+def detect_streams(objects, start_idx, thresh_ms=STREAM_MS_THRESH,
+                   min_notes=4, look_ahead=50):
+    """Stream detection with fast-path for very rapid streams (<50ms gaps)."""
     end_idx = min(start_idx + look_ahead, len(objects))
+    stream_objs = objects[i : end_idx + 1]
+    max_stream_jump = 0
+
+    for j in range(1, len(stream_objs)):
+        dx = stream_objs[j]["x"] - stream_objs[j-1]["x"]
+        dy = stream_objs[j]["y"] - stream_objs[j-1]["y"]
+        jump_dist = math.hypot(dx, dy)
+        max_stream_jump = max(max_stream_jump, jump_dist)
+
+    if max_stream_jump > 150:
+        return False, start_idx, (0, 0)
+
+    # Fast-path: simplified detection for very fast streams
+    if start_idx + 1 < len(objects):
+        first_gap = objects[start_idx + 1]["time_ms"] - objects[start_idx]["time_ms"]
+        if 0 < first_gap < 50:
+            count = 1
+            for i in range(start_idx + 1, min(start_idx + look_ahead, len(objects))):
+                gap = objects[i]["time_ms"] - objects[i-1]["time_ms"]
+                if gap > first_gap * 1.5:
+                    break
+                if objects[i]["is_slider"] or objects[i]["is_spinner"]:
+                    break
+                count += 1
+            if count >= min_notes:
+                dirs = []
+                for j in range(start_idx + 1, start_idx + min(4, count)):
+                    dx = objects[j]["x"] - objects[j-1]["x"]
+                    dy = objects[j]["y"] - objects[j-1]["y"]
+                    dist = math.hypot(dx, dy)
+                    if dist > 0:
+                        dirs.append((dx/dist, dy/dist))
+                if dirs:
+                    avg_dx = sum(d[0] for d in dirs) / len(dirs)
+                    avg_dy = sum(d[1] for d in dirs) / len(dirs)
+                    return True, start_idx + count - 1, (avg_dx, avg_dy)
+
+    # Normal detection
     stream_notes = []
     gaps = []
-    
     for i in range(start_idx, end_idx):
         o = objects[i]
-        
-        # Streams only contain circles
         if o["is_slider"] or o["is_spinner"]:
             break
-            
-        # Check timing gap
         if i > start_idx:
             gap = objects[i]["time_ms"] - objects[i-1]["time_ms"]
             if gap > thresh_ms:
                 break
             gaps.append(gap)
-            
         stream_notes.append(o)
-    
+
     if len(stream_notes) < min_notes:
         return False, start_idx, (0, 0)
-    
-    # Additional validation: check timing consistency
+
     if len(gaps) > 1:
         avg_gap = sum(gaps) / len(gaps)
-        # Allow 25% variance in gap timing
         for gap in gaps:
             if abs(gap - avg_gap) > avg_gap * 0.25:
-                # Inconsistent timing - probably not a true stream
                 return False, start_idx, (0, 0)
-    
-    # Calculate direction
+
     dirs = []
     for j in range(1, len(stream_notes)):
         dx = stream_notes[j]["x"] - stream_notes[j-1]["x"]
@@ -750,19 +773,28 @@ def detect_streams(objects, start_idx, thresh_ms=STREAM_MS_THRESH,
         dist = math.sqrt(dx*dx + dy*dy)
         if dist > 1:
             dirs.append((dx/dist, dy/dist))
-    
+
     if len(dirs) < 2:
         return False, start_idx, (0, 0)
-    
+
     avg_dx = sum(d[0] for d in dirs) / len(dirs)
     avg_dy = sum(d[1] for d in dirs) / len(dirs)
-    
     return True, start_idx + len(stream_notes) - 1, (avg_dx, avg_dy)
 
 
 def get_predicted_direction(curr_idx, objects, n=3):
     if curr_idx + 1 >= len(objects):
         return 1.0, 0.0
+
+    # Fast-path: for very fast next notes just use immediate direction
+    next_gap = objects[curr_idx + 1]["time_ms"] - objects[curr_idx]["time_ms"]
+    if next_gap < 50:
+        nx, ny = objects[curr_idx + 1]["x"], objects[curr_idx + 1]["y"]
+        dx, dy = nx - objects[curr_idx]["x"], ny - objects[curr_idx]["y"]
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            return dx/dist, dy/dist
+
     is_stream, end_idx, _ = detect_streams(objects, curr_idx + 1)
     look = min(n, PREDICT_NOTES // 2)
     path = []
@@ -784,6 +816,18 @@ def get_predicted_direction(curr_idx, objects, n=3):
 def smooth_stream_polyline_corner(points, passes, alpha):
     if len(points) < 3 or passes <= 0 or alpha <= 0:
         return [(float(x), float(y)) for x, y in points]
+
+    # Reduce smoothing for fast/large movements
+    if len(points) > 1:
+        total_dist = sum(
+            math.hypot(points[i][0]-points[i-1][0], points[i][1]-points[i-1][1])
+            for i in range(1, len(points))
+        )
+        avg_dist = total_dist / (len(points) - 1)
+        if avg_dist > 50:
+            passes = min(passes, 1)
+            alpha *= 0.5
+
     pts = [(float(x), float(y)) for x, y in points]
     for _ in range(passes):
         new_pts = [pts[0]]
@@ -797,35 +841,44 @@ def smooth_stream_polyline_corner(points, passes, alpha):
     return pts
 
 
-# Deterministic click jitter using structured noise
+# Deterministic click jitter
 
 _jitter_counter = 0
 
-def next_click_jitter_ms():
+def next_click_jitter_ms(last_gap_ms=None):
     """
-    Structured jitter: walks a sine wave so consecutive clicks alternate
-    early/late in a smooth, humanly plausible pattern instead of pure random.
-    Half-width stays within ±CLICK_VARIATION_MS.
+    Structured jitter. .3 for notes under 90ms gap (fast jumps/streams).
+    Reduced to .5 for notes under 150ms gap.
     """
+    if last_gap_ms is not None and last_gap_ms < 90:
+        return (CLICK_VARIATION_MS * 0.4)
+
     global _jitter_counter
     _jitter_counter += 1
-    # Two overlapping harmonics → aperiodic but bounded
     t = _jitter_counter
     v = (math.sin(t * 1.2) * 0.6 + math.sin(t * 0.47 + 1.0) * 0.4)
-    return v * CLICK_VARIATION_MS   # in [-CLICK_VARIATION_MS, +CLICK_VARIATION_MS]
+
+    if last_gap_ms is not None and last_gap_ms < 150:
+        return v * (CLICK_VARIATION_MS * 0.6)
+    return v * CLICK_VARIATION_MS
 
 
-# Per-frame velocity cap
+# Per-frame velocity cap (effectively unlimited, kept for structure)
 
 _last_cursor_pos = None
 _last_cursor_time = None
 
-def mouse_move_capped(x, y):
-    """Wrapper around mouse_move that caps per-frame displacement."""
+# Performance monitoring
+_perf_stats = {"cursor_updates": 0, "avg_update_ms": 0.0}
+
+def mouse_move_capped(x, y, is_fast_segment=False):
+    """Move mouse. Velocity cap is disabled (MAX_CURSOR_DELTA_PX = 999999).
+    is_fast_segment flag bypasses the cap check entirely for clarity."""
     global _last_cursor_pos, _last_cursor_time
     x, y = float(x), float(y)
     now_t = now()
-    if _last_cursor_pos is not None:
+
+    if _last_cursor_pos is not None and not is_fast_segment:
         lx, ly = _last_cursor_pos
         dx, dy = x - lx, y - ly
         dist = math.hypot(dx, dy)
@@ -833,13 +886,19 @@ def mouse_move_capped(x, y):
             scale = MAX_CURSOR_DELTA_PX / dist
             x = lx + dx * scale
             y = ly + dy * scale
+
     _last_cursor_pos  = (x, y)
     _last_cursor_time = now_t
+
+    _perf_stats["cursor_updates"] += 1
     mouse_move(x, y)
+
 
 # Segment builder
 
 def build_movement_segments(objects, sync_wall, first_note_ms, rate):
+    """Build movement segments. Sliders use pre-baked curves; streams treated as
+    individual normal segments with arc allowed; fast jump flag added per segment."""
     segments = []
     n = len(objects)
     i = 0
@@ -850,25 +909,25 @@ def build_movement_segments(objects, sync_wall, first_note_ms, rate):
         is_stream, end_idx, _ = detect_streams(objects, i)
         if is_stream:
             stream_objs = objects[i : end_idx + 1]
-            
-            # Process each note in the stream individually
             for j, obj in enumerate(stream_objs):
                 hit_wall = sync_wall + ((obj["time_ms"] + GAME_OFFSET_MS) - first_note_ms) / 1000.0 / rate
                 tx, ty = osu_to_screen(obj["x"], obj["y"])
-                
                 if prev_wall is not None and hit_wall > prev_wall:
+                    dt = hit_wall - prev_wall
+                    dist = math.hypot(tx - prev_scr[0], ty - prev_scr[1])
+                    is_fast = dt < (FAST_JUMP_THRESHOLD_MS / 1000.0)
                     segments.append({
-                        "type": "normal",  # ← Treat as normal segment, not "stream"
+                        "type": "normal",
                         "start": prev_wall, "end": hit_wall,
-                        "x1": prev_scr[0], "y1": prev_scr[1], 
+                        "x1": prev_scr[0], "y1": prev_scr[1],
                         "x2": tx, "y2": ty,
-                        "no_arc": False,  # ← Allow arcs for stream notes
+                        "no_arc": False,
+                        "is_fast": is_fast,
+                        "jump_distance": dist,
                         "obj_idx": i + j - 1,
                     })
-                
                 prev_wall = hit_wall
                 prev_scr = (tx, ty)
-            
             i = end_idx + 1
             continue
 
@@ -880,18 +939,20 @@ def build_movement_segments(objects, sync_wall, first_note_ms, rate):
 
         if obj["is_slider"] and end_wall:
             if prev_wall is not None and hit_wall > prev_wall:
+                dt = hit_wall - prev_wall
+                dist = math.hypot(tx - prev_scr[0], ty - prev_scr[1])
+                is_fast = dt < (FAST_JUMP_THRESHOLD_MS / 1000.0)
                 segments.append({
                     "type": "normal", "start": prev_wall, "end": hit_wall,
                     "x1": prev_scr[0], "y1": prev_scr[1], "x2": tx, "y2": ty,
+                    "is_fast": is_fast, "jump_distance": dist,
                     "obj_idx": i - 1,
                 })
 
-            # Reuse pre-baked curve from parsed object
             base_curve  = obj["cached_curve"]
             arc_cum     = obj["cached_arc_cum"]
             arc_total   = obj["cached_arc_total"]
 
-            # Fallback: recompute if somehow missing (shouldn't happen normally)
             if base_curve is None:
                 curve_points = obj.get("slider_curve_points") or [(obj["x"], obj["y"]), (obj["end_x"], obj["end_y"])]
                 curve_type   = obj.get("slider_curve_type") or "L"
@@ -905,16 +966,21 @@ def build_movement_segments(objects, sync_wall, first_note_ms, rate):
                 "type": "slider", "start": hit_wall, "end": end_wall,
                 "curve": base_curve, "arc_cum": arc_cum, "arc_total": arc_total,
                 "repeats": int(obj.get("slider_repeats", 1) or 1),
-                "no_arc": True, "locked": True, "obj_idx": i,
+                "no_arc": True, "locked": True, "is_fast": False,
+                "obj_idx": i,
             })
             prev_wall = end_wall
             prev_scr  = osu_to_screen(obj["end_x"], obj["end_y"])
 
         elif obj["is_spinner"] and end_wall:
             if prev_wall is not None and hit_wall > prev_wall:
+                dt = hit_wall - prev_wall
+                dist = math.hypot(tx - prev_scr[0], ty - prev_scr[1])
+                is_fast = dt < (FAST_JUMP_THRESHOLD_MS / 1000.0)
                 segments.append({
                     "type": "normal", "start": prev_wall, "end": hit_wall,
                     "x1": prev_scr[0], "y1": prev_scr[1], "x2": tx, "y2": ty,
+                    "is_fast": is_fast, "jump_distance": dist,
                     "obj_idx": i - 1,
                 })
             prev_wall = end_wall
@@ -922,9 +988,13 @@ def build_movement_segments(objects, sync_wall, first_note_ms, rate):
 
         else:
             if prev_wall is not None and hit_wall > prev_wall:
+                dt = hit_wall - prev_wall
+                dist = math.hypot(tx - prev_scr[0], ty - prev_scr[1])
+                is_fast = dt < (FAST_JUMP_THRESHOLD_MS / 1000.0)
                 segments.append({
                     "type": "normal", "start": prev_wall, "end": hit_wall,
                     "x1": prev_scr[0], "y1": prev_scr[1], "x2": tx, "y2": ty,
+                    "is_fast": is_fast, "jump_distance": dist,
                     "obj_idx": i - 1,
                 })
             prev_wall = hit_wall
@@ -936,7 +1006,6 @@ def build_movement_segments(objects, sync_wall, first_note_ms, rate):
 
 
 # State machine
-
 
 STATE_IDLE    = "IDLE"
 STATE_ARMED   = "ARMED"
@@ -987,7 +1056,6 @@ def set_status(new_status):
 
 
 # SendInput / ctypes
-
 
 MOUSEEVENTF_MOVE        = 0x0001
 MOUSEEVENTF_ABSOLUTE    = 0x8000
@@ -1069,8 +1137,6 @@ def key_up(k):
 
 # Relax / click loop
 
-
-
 def relax_loop(objects, sync_wall, first_note_ms, rate):
     stop_event = get_state("stop_event")
     stop_event.clear()
@@ -1081,9 +1147,11 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
     slider_periods  = []
 
     key_idx = 0
+    prev_time = None
+
     for obj in objects:
-        hit_wall = sync_wall + ((obj["time_ms"]     + GAME_OFFSET_MS) - first_note_ms) / 1000.0 / rate
-        end_wall = (sync_wall + ((obj["end_time_ms"]+ GAME_OFFSET_MS) - first_note_ms) / 1000.0 / rate
+        hit_wall = sync_wall + ((obj["time_ms"] + GAME_OFFSET_MS) - first_note_ms) / 1000.0 / rate
+        end_wall = (sync_wall + ((obj["end_time_ms"] + GAME_OFFSET_MS) - first_note_ms) / 1000.0 / rate
                     if obj["end_time_ms"] is not None else None)
         tx, ty = osu_to_screen(obj["x"], obj["y"])
         moves.append((hit_wall, tx, ty))
@@ -1095,7 +1163,14 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
 
         key = CLICK_KEYS[key_idx % 2]
         key_idx += 1
-        keys.append((hit_wall + HIT_BIAS_MS / 1000.0, end_wall, key,
+
+        gap_ms = None
+        if prev_time is not None:
+            gap_ms = obj["time_ms"] - prev_time
+        prev_time = obj["time_ms"]
+
+        jitter = next_click_jitter_ms(gap_ms)
+        keys.append((hit_wall + HIT_BIAS_MS / 1000.0 + jitter/1000.0, end_wall, key,
                      obj["is_spinner"], obj["is_slider"], tx, ty))
 
     segments = build_movement_segments(objects, sync_wall, first_note_ms, rate)
@@ -1117,7 +1192,6 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
     angular_velocity = (SPINNER_RPM / 60.0) * 2 * math.pi * rate
     cx_spin, cy_spin = osu_to_screen(OSU_W * 0.5, OSU_H * 0.5)
 
- 
     def cursor_worker():
         stop_evt = get_state("stop_event")
 
@@ -1128,7 +1202,6 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
                 mouse_move_capped(x, y)
             return
 
-        # Initialise cursor
         first_seg = segments[0]
         if first_seg.get("type") == "normal":
             mouse_move_capped(first_seg["x1"], first_seg["y1"])
@@ -1141,7 +1214,7 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
         seg_i = 0
         total = len(segments)
         while seg_i < total and not stop_evt.is_set():
-            seg      = segments[seg_i]
+            seg = segments[seg_i]
             now_wall = now()
 
             # Spinner handling
@@ -1151,24 +1224,28 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
                 spin_start, spin_end = spinner_periods[i_spin]
                 while now_wall < spin_end and not stop_evt.is_set():
                     elapsed = now_wall - spin_start
-                    angle   = angular_velocity * elapsed
+                    angle = angular_velocity * elapsed
                     mouse_move_capped(cx_spin + SPINNER_RADIUS * math.cos(angle),
-                                      cy_spin + SPINNER_RADIUS * math.sin(angle))
-                    sleep_until(now_wall + 0.001)
+                                        cy_spin + SPINNER_RADIUS * math.sin(angle))
+                    if (spin_end - spin_start) < 0.05:
+                        smart_sleep_until(now_wall + 0.0001)
+                    else:
+                        smart_sleep_until(now_wall + 0.001)
                     now_wall = now()
                 continue
 
             if seg["type"] in ("stream", "slider"):
                 start_wall = seg["start"]
-                end_wall   = seg["end"]
-                curve      = seg["curve"]
-                arc_cum    = seg.get("arc_cum") or []
-                arc_total  = seg.get("arc_total", 0.0)
-                repeats    = int(seg.get("repeats", 1) or 1) if seg["type"] == "slider" else 1
-                nc         = len(curve)
+                end_wall = seg["end"]
+                curve = seg["curve"]
+                arc_cum = seg.get("arc_cum") or []
+                arc_total = seg.get("arc_total", 0.0)
+                repeats = int(seg.get("repeats", 1) or 1) if seg["type"] == "slider" else 1
+                nc = len(curve)
 
                 if nc < 2:
-                    seg_i += 1; continue
+                    seg_i += 1
+                    continue
 
                 if now_wall < start_wall:
                     sleep_until(start_wall)
@@ -1178,11 +1255,12 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
                 if total_span <= ARCLENGTH_EPSILON:
                     ox, oy = curve[-1]
                     mouse_move_capped(*osu_to_screen(ox, oy))
-                    seg_i += 1; continue
+                    seg_i += 1
+                    continue
 
                 while now_wall < end_wall and not stop_evt.is_set():
-                    if is_in_interval(now_wall, spinner_starts, spinner_periods): break
-
+                    if is_in_interval(now_wall, spinner_starts, spinner_periods):
+                        break
                     elapsed = max(0.0, min(total_span, now_wall - start_wall))
                     if seg["type"] == "stream":
                         u = elapsed / total_span
@@ -1195,7 +1273,7 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
                                 u = 1.0
                             else:
                                 span_idx = max(0, min(repeats-1, int(elapsed / span_dur)))
-                                local    = max(0.0, min(1.0, (elapsed - span_idx*span_dur) / span_dur))
+                                local = max(0.0, min(1.0, (elapsed - span_idx*span_dur) / span_dur))
                                 u = local if (span_idx % 2 == 0) else (1.0 - local)
 
                     if arc_cum and arc_total > ARCLENGTH_EPSILON:
@@ -1204,7 +1282,10 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
                         ox, oy = curve[int(u * (nc - 1))]
 
                     mouse_move_capped(*osu_to_screen(ox, oy))
-                    sleep_until(now_wall + 0.001)
+                    if total_span < 0.05:
+                        smart_sleep_until(now_wall + 0.0001)
+                    else:
+                        smart_sleep_until(now_wall + 0.001)
                     now_wall = now()
 
                 if now_wall >= end_wall:
@@ -1215,11 +1296,12 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
                             ox, oy = curve[-1]
                         mouse_move_capped(*osu_to_screen(ox, oy))
 
-            else:  # normal
+            else:  # normal segment
                 start_wall = seg["start"]
-                end_wall   = seg["end"]
-                x1, y1     = seg["x1"], seg["y1"]
-                x2, y2     = seg["x2"], seg["y2"]
+                end_wall = seg["end"]
+                x1, y1 = seg["x1"], seg["y1"]
+                x2, y2 = seg["x2"], seg["y2"]
+                is_fast = seg.get("is_fast", False)
 
                 if now_wall < start_wall:
                     sleep_until(start_wall)
@@ -1228,53 +1310,121 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
                 if seg.get("locked", False):
                     mouse_move_capped(x2, y2)
                     sleep_until(end_wall)
-                    seg_i += 1; continue
+                    seg_i += 1
+                    continue
 
                 if end_wall - start_wall < SEGMENT_MIN_DUR:
-                    mouse_move_capped(x2, y2)
-                    seg_i += 1; continue
+                    mouse_move_capped(x2, y2, is_fast_segment=True)
+                    seg_i += 1
+                    continue
 
-                while now_wall < end_wall and not stop_evt.is_set():
-                    if is_in_interval(now_wall, spinner_starts, spinner_periods): break
+                segment_duration = end_wall - start_wall
 
+                # Fast jump handling - simplified and correct
+                if is_fast and USE_BUSY_WAIT_FOR_FAST:
+                    # Pre-calculate values for fast jumps
                     dt = end_wall - start_wall
-                    if dt <= SEGMENT_MIN_DUR:
-                        mouse_move_capped(x2, y2); break
-                    elapsed = now_wall - start_wall
-                    in_special = is_in_slider_or_spinner(now_wall)
-                    no_arc     = seg.get("no_arc", False)
-                    use_arc    = ARC_MODE and seg.get("allow_arc", True) and not in_special and not no_arc
+                    dx = x2 - x1
+                    dy = y2 - y1
+                    
+                    # Determine if arc should be used
+                    use_arc = False
+                    if ARC_MODE and not seg.get("no_arc", False):
+                        jump_speed = seg.get("jump_distance", 0.0) / (dt * 1000.0) if dt > 0 else 0
+                        if not (DISABLE_ARC_ON_FAST_JUMPS and jump_speed > MAX_JUMP_SPEED_PX_MS):
+                            use_arc = True
+                    
+                    # Busy-wait loop for fast jumps
+                    while now_wall < end_wall and not stop_evt.is_set():
+                        if is_in_interval(now_wall, spinner_starts, spinner_periods):
+                            break
+                        
+                        elapsed = now_wall - start_wall
+                        if use_arc:
+                            obj_idx = max(0, min(seg.get("obj_idx", 0), len(objects)-1))
+                            osu1x, osu1y = screen_to_osu(x1, y1)
+                            osu2x, osu2y = screen_to_osu(x2, y2)
+                            dist_osu_px = math.hypot(osu2x-osu1x, osu2y-osu1y)
+                            
+                            # For very large jumps (>200 osu px), don't use prediction
+                            # Just use perpendicular arc like the first script
+                            if dist_osu_px > 200:
+                                pred_dir_x, pred_dir_y = None, None
+                            else:
+                                pred_dir_x, pred_dir_y = get_predicted_direction(obj_idx, objects)
+                        else:
+                            eased = smooth_easing(max(0.0, min(1.0, elapsed / dt)))
+                            x = x1 + dx * eased
+                            y = y1 + dy * eased
+                        
+                        mouse_move_capped(x, y, is_fast_segment=True)
+                        now_wall = now()
+                        # No sleep - busy wait for next frame
+                    
+                    # Final snap
+                    mouse_move_capped(x2, y2, is_fast_segment=True)
+                
+                else:
+                    # Normal speed handling with sleep
+                    while now_wall < end_wall and not stop_evt.is_set():
+                        if is_in_interval(now_wall, spinner_starts, spinner_periods):
+                            break
 
-                    if use_arc:
-                        obj_idx = max(0, min(seg.get("obj_idx", 0), len(objects)-1))
-                        osu1x, osu1y = screen_to_osu(x1, y1)
-                        osu2x, osu2y = screen_to_osu(x2, y2)
-                        dist_osu_px  = math.hypot(osu2x-osu1x, osu2y-osu1y)
-                        pred_dir_x, pred_dir_y = get_predicted_direction(obj_idx, objects)
-                        x, y = apply_predictive_arc(elapsed, dt, x1, y1, x2, y2,
-                                                    dist_osu_px, pred_dir_x, pred_dir_y)
-                    else:
-                        eased = smooth_easing(elapsed / dt)
-                        x = x1 + (x2 - x1) * eased
-                        y = y1 + (y2 - y1) * eased
+                        dt = end_wall - start_wall
+                        if dt <= SEGMENT_MIN_DUR:
+                            mouse_move_capped(x2, y2)
+                            break
+                        
+                        elapsed = now_wall - start_wall
+                        in_special = is_in_slider_or_spinner(now_wall)
+                        no_arc = seg.get("no_arc", False)
+                        use_arc = ARC_MODE and not in_special and not no_arc
 
-                    mouse_move_capped(x, y)
-                    sleep_until(now_wall + 0.001)
-                    now_wall = now()
+                        if use_arc:
+                            # Disable arc for high-speed jumps
+                            jump_speed = seg.get("jump_distance", 0.0) / (dt * 1000.0) if dt > 0 else 0
+                            if DISABLE_ARC_ON_FAST_JUMPS and jump_speed > MAX_JUMP_SPEED_PX_MS:
+                                use_arc = False
 
-                if now_wall >= end_wall:
-                    if not is_in_interval(now_wall, spinner_starts, spinner_periods):
-                        mouse_move_capped(x2, y2)
+                        if use_arc:
+                            obj_idx = max(0, min(seg.get("obj_idx", 0), len(objects)-1))
+                            osu1x, osu1y = screen_to_osu(x1, y1)
+                            osu2x, osu2y = screen_to_osu(x2, y2)
+                            dist_osu_px = math.hypot(osu2x-osu1x, osu2y-osu1y)
+                            pred_dir_x, pred_dir_y = get_predicted_direction(obj_idx, objects)
+                            x, y = apply_predictive_arc(elapsed, dt, x1, y1, x2, y2,
+                                                        dist_osu_px, pred_dir_x, pred_dir_y)
+                        else:
+                            eased = smooth_easing(elapsed / dt)
+                            x = x1 + (x2 - x1) * eased
+                            y = y1 + (y2 - y1) * eased
+
+                        mouse_move_capped(x, y)
+                        
+                        # Adaptive sleep based on remaining time
+                        remaining = end_wall - now_wall
+                        if remaining > 0.002:
+                            smart_sleep_until(now_wall + 0.001)
+                        else:
+                            # Busy wait for final 2ms
+                            while now() < end_wall:
+                                mouse_move_capped(x2, y2)
+                            break
+                        
+                        now_wall = now()
+
+                    if now_wall >= end_wall:
+                        if not is_in_interval(now_wall, spinner_starts, spinner_periods):
+                            mouse_move_capped(x2, y2)
 
             seg_i += 1
 
- 
     def key_worker():
         stop_evt = get_state("stop_event")
         for press_wall, end_wall, key, is_spinner, is_slider, sx, sy in keys:
-            if stop_evt.is_set(): return
-            jitter = next_click_jitter_ms() / 1000.0
-            sleep_until(press_wall + jitter)
+            if stop_evt.is_set():
+                return
+            sleep_until(press_wall)
             key_down(key)
             if is_spinner and end_wall:
                 sleep_until(end_wall)
@@ -1288,6 +1438,7 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
     if not RELAX_MODE:
         threading.Thread(target=cursor_worker, daemon=True).start()
     threading.Thread(target=key_worker, daemon=True).start()
+
 
 # Hotkeys & tosu WebSocket
 
@@ -1381,6 +1532,7 @@ def start_ws():
                                 on_error=on_error,
                                 on_close=on_close)
     threading.Thread(target=ws.run_forever, daemon=True).start()
+
 
 # Main
 
