@@ -1320,7 +1320,7 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
 
                 segment_duration = end_wall - start_wall
 
-                # Fast jump handling - simplified and correct
+                # Fast jump handling - simplified and correct.
                 if is_fast and USE_BUSY_WAIT_FOR_FAST:
                     # Pre-calculate values for fast jumps
                     dt = end_wall - start_wall
