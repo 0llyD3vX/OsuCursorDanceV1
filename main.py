@@ -21,8 +21,8 @@ SYNC_HOTKEY    = "q"    # press this key before any notes play inside the map to
 STOP_HOTKEY    = "w"    # press this to stop
 CLICK_KEYS     = ["z", "x"]
 GAME_OFFSET_MS = 0    # dont touch this (it doesnt do much)
-HIT_BIAS_MS    = -10   # reverse sign (positive ingame offset = negative one here)
-CURSOR_SENS    = 1.52    # sensitivity
+HIT_BIAS_MS    = 0   # reverse sign (positive ingame offset = negative one here)
+CURSOR_SENS    = 1# breaks things, script has been changed to work with any sens so keep this at one even if your sensitivity is 2.0 for example
 
 # Movement Tuning
 MOVEMENT_MODE  = "predictive"   # linear / arc / predictive
@@ -55,8 +55,8 @@ MAX_JUMP_SPEED_PX_MS     = 15      # arc disable threshold (pixels per ms)
 USE_BUSY_WAIT_FOR_FAST   = True    # busy-wait for precise timing on fast segments
 
 # Display Setup
-SCREEN_W = 2560
-SCREEN_H = 1440
+SCREEN_W = 1920
+SCREEN_H = 1080
 PF_HEIGHT_PCT = 0.80
 PF_TOP_PCT    = 0.095
 PF_Y_OFFSET   = 15        # if notes are hit too high/low change this
@@ -706,7 +706,7 @@ def detect_streams(objects, start_idx, thresh_ms=STREAM_MS_THRESH,
                    min_notes=4, look_ahead=50):
     """Stream detection with fast-path for very rapid streams (<50ms gaps)."""
     end_idx = min(start_idx + look_ahead, len(objects))
-    stream_objs = objects[i : end_idx + 1]
+    stream_objs = objects[start_idx : end_idx + 1]
     max_stream_jump = 0
 
     for j in range(1, len(stream_objs)):
@@ -1320,7 +1320,7 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
 
                 segment_duration = end_wall - start_wall
 
-                # Fast jump handling - simplified and correct.
+                # Fast jump handling - simplified and correct
                 if is_fast and USE_BUSY_WAIT_FOR_FAST:
                     # Pre-calculate values for fast jumps
                     dt = end_wall - start_wall
@@ -1352,6 +1352,8 @@ def relax_loop(objects, sync_wall, first_note_ms, rate):
                                 pred_dir_x, pred_dir_y = None, None
                             else:
                                 pred_dir_x, pred_dir_y = get_predicted_direction(obj_idx, objects)
+                            x, y = apply_predictive_arc(elapsed, dt, x1, y1, x2, y2,
+                                                        dist_osu_px, pred_dir_x, pred_dir_y)
                         else:
                             eased = smooth_easing(max(0.0, min(1.0, elapsed / dt)))
                             x = x1 + dx * eased
