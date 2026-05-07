@@ -2,6 +2,10 @@
 
 Advanced relax/assist bot for osu!lazer on Windows. Features predictive movement, stream detection, a dynamic arc system, and configurable click jitter for human-like patterns.
 
+## IMPORTANT NOTE:
+Leave CURSOR_SENS at value 1, i will remove this as an option in futuure updates but for now it is broken, the script will work no matter what sensitivity your playing at, have fun. :)
+
+
 ---
 
 ## Showcase (v0.1.0)
